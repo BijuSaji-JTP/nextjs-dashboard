@@ -1,19 +1,9 @@
 import bcrypt from 'bcrypt';
-// import { db, sql } from '@/db';
-// import { db } from '@vercel/postgres';
+import { PoolClient } from 'pg';
+import { pool } from '@/app/lib/db';
 import { invoices, customers, revenue, users } from '../lib/placeholder-data';
-import "@/db";
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import ws from 'ws';
-neonConfig.webSocketConstructor = ws;
- 
-const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
- 
-const client = await pool.connect();
 
-// const client = await db.connect();
-
-async function seedUsers() {
+async function seedUsers(client: PoolClient) {
   await client.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -32,13 +22,13 @@ async function seedUsers() {
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (id) DO NOTHING;
       `, [user.id, user.name, user.email, hashedPassword]);
-    }),
+    })
   );
 
   return insertedUsers;
 }
 
-async function seedInvoices() {
+async function seedInvoices(client: PoolClient) {
   await client.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
 
   await client.query(`
@@ -57,14 +47,14 @@ async function seedInvoices() {
         INSERT INTO invoices (customer_id, amount, status, date)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (id) DO NOTHING;
-      `, [invoice.customer_id, invoice.amount, invoice.status, invoice.date]),
-    ),
+      `, [invoice.customer_id, invoice.amount, invoice.status, invoice.date])
+    )
   );
 
   return insertedInvoices;
 }
 
-async function seedCustomers() {
+async function seedCustomers(client: PoolClient) {
   await client.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
 
   await client.query(`
@@ -82,14 +72,14 @@ async function seedCustomers() {
         INSERT INTO customers (id, name, email, image_url)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (id) DO NOTHING;
-      `, [customer.id, customer.name, customer.email, customer.image_url]),
-    ),
+      `, [customer.id, customer.name, customer.email, customer.image_url])
+    )
   );
 
   return insertedCustomers;
 }
 
-async function seedRevenue() {
+async function seedRevenue(client: PoolClient) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS revenue (
       month VARCHAR(4) NOT NULL UNIQUE,
@@ -103,29 +93,32 @@ async function seedRevenue() {
         INSERT INTO revenue (month, revenue)
         VALUES ($1, $2)
         ON CONFLICT (month) DO NOTHING;
-      `, [rev.month, rev.revenue]),
-    ),
+      `, [rev.month, rev.revenue])
+    )
   );
 
   return insertedRevenue;
 }
 
 export async function GET() {
-  // return Response.json({
-  //   message:
-  //     'Uncomment this file and remove this line. You can delete this file when you are finished.',
-  // });
+  const client: PoolClient = await pool.connect();
   try {
     await client.query(`BEGIN`);
-    await seedUsers();
-    await seedCustomers();
-    await seedInvoices();
-    await seedRevenue();
+    await seedUsers(client);
+    await seedCustomers(client);
+    await seedInvoices(client);
+    await seedRevenue(client);
     await client.query(`COMMIT`);
 
     return Response.json({ message: 'Database seeded successfully' });
   } catch (error) {
     await client.query(`ROLLBACK`);
-    return Response.json({ error }, { status: 500 });
+    if (error instanceof Error) {
+      return Response.json({ error: error.message }, { status: 500 });
+    } else {
+      return Response.json({ error: "unknown error occured while seeding data"}, { status: 500 });
+    }
+  } finally {
+    client.release(); // Release the client back to the pool
   }
 }

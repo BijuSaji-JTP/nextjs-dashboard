@@ -1,5 +1,5 @@
-## Next.js App Router Course - Starter
+docker commands
 
-This is the starter template for the Next.js App Router Course. It contains the starting code for the dashboard application.
+sudo docker run --name postgres-db -e POSTGRES_PASSWORD=password -e POSTGRES_USER=test1user -e POSTGRES_DB=test1db -p 5432:5432 -d postgres
 
-For more information, see the [course curriculum](https://nextjs.org/learn) on the Next.js Website.
+sudo docker exec -it postgres-db psql -U test1user -d test1db
